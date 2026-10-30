@@ -1,0 +1,105 @@
+#!/bin/bash
+# Prints one line per interval: cpu% cpuW gpu% gpuW cpuTemp gpuTemp
+# Any value that can't be read on this machine is printed as "-".
+#
+# CPU temp:  k10temp / zenpower (AMD) or coretemp (Intel)
+# CPU power: RAPL package energy (needs a readable energy_uj)
+# GPU:       nvidia-smi (NVIDIA) or amdgpu sysfs (AMD); PASTEL_STATS_GPU=nvidia|amd forces one
+
+interval=${1:-2}
+rapl=/sys/class/powercap/intel-rapl:0/energy_uj
+
+hwmon_by_name() {
+  local f
+  for f in /sys/class/hwmon/hwmon*/name; do
+    [[ $(<"$f") == "$1" ]] && { echo "${f%/name}"; return; }
+  done
+}
+
+# Temperature input file for the CPU package, or empty if none is found.
+find_cpu_temp() {
+  local dir label
+  for name in k10temp zenpower; do
+    dir=$(hwmon_by_name "$name")
+    [[ -n $dir && -r $dir/temp1_input ]] && { echo "$dir/temp1_input"; return; }
+  done
+  dir=$(hwmon_by_name coretemp)
+  [[ -z $dir ]] && return
+  for label in "$dir"/temp*_label; do
+    [[ $(<"$label") == Package* ]] && { echo "${label%_label}_input"; return; }
+  done
+  [[ -r $dir/temp1_input ]] && echo "$dir/temp1_input"
+}
+
+# The amdgpu device with the most VRAM, so a discrete card wins over an iGPU.
+find_amd_gpu() {
+  local dev best="" best_vram=-1 vram
+  for dev in /sys/class/drm/card*/device; do
+    [[ -r $dev/gpu_busy_percent && $(<"$dev/vendor") == 0x1002 ]] || continue
+    vram=$(cat "$dev/mem_info_vram_total" 2>/dev/null || echo 0)
+    (( vram > best_vram )) && { best=$dev; best_vram=$vram; }
+  done
+  echo "$best"
+}
+
+cpu_temp_file=$(find_cpu_temp)
+
+gpu_kind=${PASTEL_STATS_GPU:-}
+if [[ -z $gpu_kind ]]; then
+  if command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1; then
+    gpu_kind=nvidia
+  else
+    gpu_kind=amd
+  fi
+fi
+
+amd_dev="" amd_hwmon=""
+if [[ $gpu_kind == amd ]]; then
+  amd_dev=$(find_amd_gpu)
+  [[ -n $amd_dev ]] && amd_hwmon=$(ls -d "$amd_dev"/hwmon/hwmon* 2>/dev/null | head -1)
+fi
+
+read_gpu() {
+  gpu="-" gpuw="-" gtemp="-"
+  if [[ $gpu_kind == nvidia ]]; then
+    IFS=', ' read -r gpu gpuw gtemp < <(nvidia-smi --query-gpu=utilization.gpu,power.draw,temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -1)
+    [[ $gpuw =~ ^[0-9.]+$ ]] && gpuw=$(printf '%.0f' "$gpuw") || gpuw="-"
+    [[ $gpu =~ ^[0-9]+$ ]] || gpu="-"
+    [[ $gtemp =~ ^[0-9]+$ ]] || gtemp="-"
+  elif [[ -n $amd_dev ]]; then
+    gpu=$(cat "$amd_dev/gpu_busy_percent" 2>/dev/null || echo "-")
+    if [[ -n $amd_hwmon ]]; then
+      local uw
+      uw=$(cat "$amd_hwmon/power1_average" 2>/dev/null || cat "$amd_hwmon/power1_input" 2>/dev/null)
+      [[ -n $uw ]] && gpuw=$(( (uw + 500000) / 1000000 ))
+      [[ -r $amd_hwmon/temp1_input ]] && gtemp=$(( $(<"$amd_hwmon/temp1_input") / 1000 ))
+    fi
+  fi
+}
+
+read_cpu() { read -r _ u n s i w q sq st _ < /proc/stat; idle=$((i + w)); total=$((u + n + s + i + w + q + sq + st)); }
+
+read_cpu; prev_idle=$idle; prev_total=$total
+prev_energy=$(cat "$rapl" 2>/dev/null); prev_time=$(date +%s%N)
+
+while sleep "$interval"; do
+  read_cpu
+  dt=$((total - prev_total)); di=$((idle - prev_idle))
+  cpu=$(( dt > 0 ? (100 * (dt - di) + dt / 2) / dt : 0 ))
+  prev_idle=$idle; prev_total=$total
+
+  now=$(date +%s%N)
+  energy=$(cat "$rapl" 2>/dev/null)
+  cpuw="-"
+  if [[ -n $energy && -n $prev_energy && $energy -ge $prev_energy ]]; then
+    cpuw=$(( (energy - prev_energy) * 1000 / (now - prev_time) ))
+  fi
+  prev_energy=$energy; prev_time=$now
+
+  ctemp="-"
+  [[ -n $cpu_temp_file ]] && ctemp=$(( $(cat "$cpu_temp_file" 2>/dev/null || echo 0) / 1000 ))
+
+  read_gpu
+
+  echo "$cpu $cpuw $gpu $gpuw $ctemp $gtemp"
+done

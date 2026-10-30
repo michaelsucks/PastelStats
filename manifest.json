@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.michaelsucks.pastel-stats",
+  "name": "Pastel Stats",
+  "version": "1.0.0",
+  "author": "Michael Tran",
+  "description": "CPU and GPU usage, temperatures, and power draw in the bar, color-coded in pastels by load.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Pastel Stats",
+    "description": "CPU and GPU usage, temperatures, and power draw, color-coded by load.",
+    "category": "System",
+    "defaultSection": "right",
+    "allowMultiple": false
+  }
+}
