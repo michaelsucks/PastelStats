@@ -1,0 +1,5 @@
+{
+  "cpu": "CPU",
+  "gpu": "GPU",
+  "cpuWattsUnavailable": "(CPU wattage unavailable)"
+}

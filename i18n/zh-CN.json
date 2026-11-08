@@ -1,0 +1,5 @@
+{
+  "cpu": "CPU",
+  "gpu": "GPU",
+  "cpuWattsUnavailable": "（无法读取 CPU 功耗）"
+}

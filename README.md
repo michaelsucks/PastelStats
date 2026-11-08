@@ -12,6 +12,7 @@ An [Omarchy](https://omarchy.org/) bar widget that shows CPU and GPU usage, temp
 - Each number shifts from green to yellow to peach to pink-red as it climbs
 - Anything your hardware can't report is left out instead of showing zeros
 - Hover for a per-device breakdown, click to open btop
+- Follows Omarchy's display language (English and Simplified Chinese included)
 
 ## Install
 
@@ -26,6 +27,18 @@ omarchy plugin remove io.github.michaelsucks.pastel-stats
 ```
 
 This takes the widget off the bar and deletes the plugin folder. The plugin only reads from `/proc` and `/sys` and never changes your system or other config.
+
+## Languages
+
+The widget follows the display language picked in Omarchy's Setup. The strings live in `i18n/`, one flat JSON file per language, read with the shell's `qs.Commons.Translations`:
+
+```qml
+Commons.Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
+```
+
+English is `i18n/en.json` and doubles as the fallback: a key missing from a language keeps its English text, so a language can be added one file at a time and can never break the widget. Simplified Chinese (`zh-CN`) is included.
+
+To add a language, copy `i18n/en.json`, translate the values, and save it under the code Omarchy uses (`zh-TW`, `de`, `pt-BR`, …). No code change is needed. The name and description shown in the plugin list come from `manifest.json` and are not translated.
 
 ## Colors
 

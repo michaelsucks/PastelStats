@@ -1,12 +1,17 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 BarWidget {
   id: root
   moduleName: "io.github.michaelsucks.pastel-stats"
+
+  // Catalogs in i18n/, one flat JSON per language. A key missing from a
+  // language falls back to the English text passed to t(), so the widget keeps
+  // working in English even when no catalog matches the shell's language.
+  Commons.Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
 
   readonly property int interval: setting("interval", 2)
   // Each value is the script's raw field; "-" means it isn't readable on this machine.
@@ -66,11 +71,11 @@ BarWidget {
   // Builds the label as a list of segments so unreadable values drop out cleanly.
   function segments(colored) {
     function part(text, color) { return colored ? paint(text, color) : text }
-    var cpuPart = "CPU " + part(cpu + "%", tint(cpu, 50, 80, 90))
+    var cpuPart = strings.t("cpu", "CPU") + " " + part(cpu + "%", tint(cpu, 50, 80, 90))
     if (cpuTemp !== "-") cpuPart += " " + part(cpuTemp + "°", tint(cpuTemp, setting("cpuTempWarm", 70), setting("cpuTempHot", 85), setting("cpuTempCritical", 95)))
     var out = [cpuPart]
     if (hasGpu) {
-      var gpuPart = "GPU"
+      var gpuPart = strings.t("gpu", "GPU")
       if (gpu !== "-") gpuPart += " " + part(gpu + "%", tint(gpu, 50, 80, 90))
       if (gpuTemp !== "-") gpuPart += " " + part(gpuTemp + "°", tint(gpuTemp, setting("gpuTempWarm", 60), setting("gpuTempHot", 75), setting("gpuTempCritical", 83)))
       out.push(gpuPart)
@@ -96,10 +101,10 @@ BarWidget {
     horizontalMargin: 8.75
     verticalPadding: 8.75
     // Even width keeps the centered label on whole pixels so it renders as crisp as the clock.
-    fixedWidth: root.vertical ? -1 : Math.ceil(coloredLabel.implicitWidth / 2) * 2 + Math.round(Style.spaceReal(8.75)) * 2
-    tooltipText: root.tooltipLine("CPU", root.cpu, root.cpuWatts, root.cpuTemp)
-      + (root.hasGpu ? "\n" + root.tooltipLine("GPU", root.gpu, root.gpuWatts, root.gpuTemp) : "")
-      + (root.cpuWatts === "-" ? "\n(CPU wattage unavailable)" : "")
+    fixedWidth: root.vertical ? -1 : Math.ceil(coloredLabel.implicitWidth / 2) * 2 + Math.round(Commons.Style.spaceReal(8.75)) * 2
+    tooltipText: root.tooltipLine(strings.t("cpu", "CPU"), root.cpu, root.cpuWatts, root.cpuTemp)
+      + (root.hasGpu ? "\n" + root.tooltipLine(strings.t("gpu", "GPU"), root.gpu, root.gpuWatts, root.gpuTemp) : "")
+      + (root.cpuWatts === "-" ? "\n" + strings.t("cpuWattsUnavailable", "(CPU wattage unavailable)") : "")
 
     onPressed: function(b) {
       if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
